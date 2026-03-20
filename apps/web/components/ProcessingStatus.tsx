@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 
 interface RefinementStatus {
   attempt: number;
@@ -16,23 +16,30 @@ interface ProcessingStatusProps {
 export function ProcessingStatus({ campaignId }: ProcessingStatusProps) {
   const [status, setStatus] = useState<RefinementStatus | null>(null);
 
+  const campaignIdRef = useRef(campaignId);
+  campaignIdRef.current = campaignId;
+
   useEffect(() => {
     if (!campaignId) {
       setStatus(null);
       return;
     }
     const fetchStatus = async () => {
+      const id = campaignId;
       try {
         const res = await fetch(
-          `/api/leads/refinement-status?campaignId=${encodeURIComponent(campaignId)}`
+          `/api/leads/refinement-status?campaignId=${encodeURIComponent(id)}`
         );
+        if (campaignIdRef.current !== id) return;
         if (res.ok) {
           const data = await res.json();
+          if (campaignIdRef.current !== id) return;
           setStatus(data);
         } else {
           setStatus(null);
         }
       } catch {
+        if (campaignIdRef.current !== id) return;
         setStatus(null);
       }
     };

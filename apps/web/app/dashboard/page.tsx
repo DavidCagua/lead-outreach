@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { SearchBar } from '@/components/SearchBar';
 import { ProcessingStatus } from '@/components/ProcessingStatus';
 import { LeadList, DEFAULT_FILTER } from '@/components/LeadList';
@@ -37,17 +37,21 @@ export default function DashboardPage() {
   const [regeneratingId, setRegeneratingId] = useState<string | null>(null);
   const [insightLead, setInsightLead] = useState<Lead | null>(null);
   const [insightOpen, setInsightOpen] = useState(false);
+  const currentCampaignIdRef = useRef(currentCampaignId);
+  currentCampaignIdRef.current = currentCampaignId;
 
   const fetchLeads = useCallback(async () => {
-    if (!currentCampaignId) {
+    const campaignId = currentCampaignId;
+    if (!campaignId) {
       setLeads([]);
       setStats({ total: 0, completed: 0, processing: 0, failed: 0 });
       return;
     }
     try {
       const res = await fetch(
-        `/api/leads?campaignId=${encodeURIComponent(currentCampaignId)}`
+        `/api/leads?campaignId=${encodeURIComponent(campaignId)}`
       );
+      if (currentCampaignIdRef.current !== campaignId) return;
       if (res.status === 404) {
         setLeads([]);
         setStats({ total: 0, completed: 0, processing: 0, failed: 0 });
@@ -55,11 +59,12 @@ export default function DashboardPage() {
       }
       if (res.ok) {
         const data = await res.json();
+        if (currentCampaignIdRef.current !== campaignId) return;
         setLeads(data.leads ?? []);
         setStats(data.stats ?? { total: 0, completed: 0, processing: 0, failed: 0 });
       }
     } catch {
-      // Ignore
+      if (currentCampaignIdRef.current !== campaignId) return;
     }
   }, [currentCampaignId]);
 
@@ -112,6 +117,8 @@ export default function DashboardPage() {
     if (!campaignId) {
       setCurrentCampaignId(null);
       setCurrentCampaignQuery(null);
+      setLeads([]);
+      setStats({ total: 0, completed: 0, processing: 0, failed: 0 });
       return;
     }
     const campaign = campaigns.find((c) => c.id === campaignId);
@@ -119,6 +126,8 @@ export default function DashboardPage() {
       setCurrentCampaignId(campaign.id);
       setCurrentCampaignQuery(campaign.query);
       setCurrentCampaignStatus(campaign.status);
+      setLeads([]);
+      setStats({ total: 0, completed: 0, processing: 0, failed: 0 });
     }
   };
 
