@@ -18,7 +18,14 @@ interface CampaignStats {
   failed: number;
 }
 
+interface CampaignOption {
+  id: string;
+  query: string;
+  status: string;
+}
+
 export default function DashboardPage() {
+  const [campaigns, setCampaigns] = useState<CampaignOption[]>([]);
   const [currentCampaignId, setCurrentCampaignId] = useState<string | null>(null);
   const [currentCampaignQuery, setCurrentCampaignQuery] = useState<string | null>(null);
   const [currentCampaignStatus, setCurrentCampaignStatus] = useState<string | null>(null);
@@ -28,8 +35,6 @@ export default function DashboardPage() {
   const [filter, setFilter] = useState(DEFAULT_FILTER);
   const [isGenerating, setIsGenerating] = useState(false);
   const [regeneratingId, setRegeneratingId] = useState<string | null>(null);
-  const [retryingId, setRetryingId] = useState<string | null>(null);
-  const [isRetryingAll, setIsRetryingAll] = useState(false);
   const [insightLead, setInsightLead] = useState<Lead | null>(null);
   const [insightOpen, setInsightOpen] = useState(false);
 
@@ -58,6 +63,29 @@ export default function DashboardPage() {
     }
   }, [currentCampaignId]);
 
+  const fetchCampaigns = useCallback(async (autoSelectIfNone = false) => {
+    try {
+      const res = await fetch('/api/campaigns');
+      if (res.ok) {
+        const data = await res.json();
+        const list = data ?? [];
+        setCampaigns(list);
+        if (autoSelectIfNone && list.length > 0) {
+          const latest = list[0];
+          setCurrentCampaignId(latest.id);
+          setCurrentCampaignQuery(latest.query);
+          setCurrentCampaignStatus(latest.status);
+        }
+      }
+    } catch {
+      // Ignore
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchCampaigns(true);
+  }, [fetchCampaigns]);
+
   useEffect(() => {
     fetchLeads();
     const interval = setInterval(fetchLeads, POLL_INTERVAL_MS);
@@ -75,7 +103,22 @@ export default function DashboardPage() {
       setCurrentCampaignId(data.campaignId ?? null);
       setCurrentCampaignQuery(data.query ?? query);
       setCurrentCampaignStatus('running');
+      await fetchCampaigns(false);
       await fetchLeads();
+    }
+  };
+
+  const handleSelectCampaign = (campaignId: string) => {
+    if (!campaignId) {
+      setCurrentCampaignId(null);
+      setCurrentCampaignQuery(null);
+      return;
+    }
+    const campaign = campaigns.find((c) => c.id === campaignId);
+    if (campaign) {
+      setCurrentCampaignId(campaign.id);
+      setCurrentCampaignQuery(campaign.query);
+      setCurrentCampaignStatus(campaign.status);
     }
   };
 
@@ -117,39 +160,6 @@ export default function DashboardPage() {
       }
     } finally {
       setIsGenerating(false);
-    }
-  };
-
-  const handleRetry = async (leadId: string) => {
-    setRetryingId(leadId);
-    try {
-      const res = await fetch('/api/leads/retry', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ leadId, campaignId: currentCampaignId }),
-      });
-      if (res.ok) await fetchLeads();
-    } finally {
-      setRetryingId(null);
-    }
-  };
-
-  const handleRetryAllFailed = async () => {
-    const failedIds = leads.filter((l) => l.status === 'failed').map((l) => l.id);
-    if (failedIds.length === 0) return;
-    setIsRetryingAll(true);
-    try {
-      const res = await fetch('/api/leads/retry', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          leadIds: failedIds,
-          campaignId: currentCampaignId,
-        }),
-      });
-      if (res.ok) await fetchLeads();
-    } finally {
-      setIsRetryingAll(false);
     }
   };
 
@@ -203,7 +213,7 @@ export default function DashboardPage() {
 
       <SearchBar onSearch={handleSearch} />
 
-      {currentCampaignId && currentCampaignQuery && (
+      {campaigns.length > 0 && (
         <div
           style={{
             marginTop: 16,
@@ -213,11 +223,36 @@ export default function DashboardPage() {
             background: 'var(--bg-card)',
             fontSize: 14,
             color: 'var(--text-muted)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 12,
+            flexWrap: 'wrap',
           }}
         >
-          <strong>Campaign:</strong> {currentCampaignQuery}
-          {stats.total > 0 && (
-            <span style={{ marginLeft: 12 }}>
+          <strong>Campaign:</strong>
+          <select
+            value={currentCampaignId ?? ''}
+            onChange={(e) => handleSelectCampaign(e.target.value || '')}
+            style={{
+              padding: '6px 10px',
+              borderRadius: 'var(--radius-sm)',
+              border: '1px solid var(--border-muted)',
+              background: 'var(--bg)',
+              color: 'var(--text)',
+              fontSize: 13,
+              cursor: 'pointer',
+              minWidth: 200,
+            }}
+          >
+            <option value="">Select a campaign…</option>
+            {campaigns.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.query} ({c.status})
+              </option>
+            ))}
+          </select>
+          {currentCampaignId && stats.total > 0 && (
+            <span>
               Status: {currentCampaignStatus ?? 'running'} ({stats.completed}/{stats.total} processed)
             </span>
           )}
@@ -243,7 +278,9 @@ export default function DashboardPage() {
             borderRadius: 'var(--radius)',
           }}
         >
-          Search to discover leads and start a campaign.
+          {campaigns.length > 0
+            ? 'Select a campaign above to view leads.'
+            : 'Search to discover leads and start a campaign.'}
         </div>
       ) : stats.total === 0 && leads.length === 0 ? (
         <div
@@ -267,10 +304,6 @@ export default function DashboardPage() {
           onToggle={handleToggleLead}
           onViewDetails={handleViewDetails}
           onSelectAllScoreAbove7={handleSelectAllScoreAbove7}
-          onRetry={handleRetry}
-          onRetryAllFailed={handleRetryAllFailed}
-          retryingId={retryingId}
-          isRetryingAll={isRetryingAll}
           isLoading={false}
         />
       )}

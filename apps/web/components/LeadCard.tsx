@@ -7,8 +7,6 @@ interface LeadCardProps {
   selected: boolean;
   onToggle: () => void;
   onViewDetails: () => void;
-  onRetry?: (leadId: string) => void;
-  isRetrying?: boolean;
   showCheckbox?: boolean;
 }
 
@@ -31,8 +29,6 @@ export function LeadCard({
   selected,
   onToggle,
   onViewDetails,
-  onRetry,
-  isRetrying,
   showCheckbox = true,
 }: LeadCardProps) {
   const score = lead.score?.score;
@@ -130,42 +126,6 @@ export function LeadCard({
           >
             View details
           </button>
-          {lead.status === 'failed' && onRetry && (
-            <button
-              onClick={() => onRetry(lead.id)}
-              disabled={isRetrying}
-              style={{
-                padding: '6px 12px',
-                borderRadius: 'var(--radius-sm)',
-                border: '1px solid var(--border-muted)',
-                background: 'transparent',
-                color: 'var(--text-muted)',
-                fontSize: 12,
-                cursor: isRetrying ? 'not-allowed' : 'pointer',
-                opacity: isRetrying ? 0.6 : 1,
-              }}
-            >
-              {isRetrying ? 'Retrying…' : 'Retry'}
-            </button>
-          )}
-          {lead.status === 'pending' && onRetry && (
-            <button
-              onClick={() => onRetry(lead.id)}
-              disabled={isRetrying}
-              style={{
-                padding: '6px 12px',
-                borderRadius: 'var(--radius-sm)',
-                border: '1px solid var(--border-muted)',
-                background: 'transparent',
-                color: 'var(--text-muted)',
-                fontSize: 12,
-                cursor: isRetrying ? 'not-allowed' : 'pointer',
-                opacity: isRetrying ? 0.6 : 1,
-              }}
-            >
-              {isRetrying ? 'Retrying…' : 'Retry (stuck)'}
-            </button>
-          )}
         </div>
         {lead.status === 'failed' && (
           <div style={{ fontSize: 13, color: 'var(--error)', marginTop: 8 }}>

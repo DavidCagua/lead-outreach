@@ -19,10 +19,6 @@ interface LeadListProps {
   onToggle: (id: string) => void;
   onViewDetails: (lead: Lead) => void;
   onSelectAllScoreAbove7: () => void;
-  onRetry?: (leadId: string) => void;
-  onRetryAllFailed?: () => void;
-  retryingId?: string | null;
-  isRetryingAll?: boolean;
   isLoading?: boolean;
 }
 
@@ -34,10 +30,6 @@ export function LeadList({
   onToggle,
   onViewDetails,
   onSelectAllScoreAbove7,
-  onRetry,
-  onRetryAllFailed,
-  retryingId,
-  isRetryingAll,
   isLoading,
 }: LeadListProps) {
   const filteredLeads = useMemo(() => {
@@ -52,7 +44,6 @@ export function LeadList({
   const selectableHighScoreCount = leads.filter(
     (l) => l.status === 'completed' && l.score && l.score.score > 7
   ).length;
-  const failedCount = leads.filter((l) => l.status === 'failed').length;
 
   return (
     <div
@@ -74,27 +65,6 @@ export function LeadList({
         />
       </aside>
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 16, minWidth: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-          {failedCount > 0 && onRetryAllFailed && (
-            <button
-              onClick={onRetryAllFailed}
-              disabled={isRetryingAll}
-              style={{
-                padding: '8px 14px',
-                borderRadius: 'var(--radius-sm)',
-                border: '1px solid var(--border-muted)',
-                background: 'transparent',
-                color: 'var(--text-muted)',
-                fontSize: 13,
-                cursor: isRetryingAll ? 'not-allowed' : 'pointer',
-                opacity: isRetryingAll ? 0.6 : 1,
-              }}
-            >
-              {isRetryingAll ? 'Retrying…' : `Retry all failed (${failedCount})`}
-            </button>
-          )}
-        </div>
-
         {isLoading && (
           <div style={{ color: 'var(--text-muted)', fontSize: 14 }}>Loading leads...</div>
         )}
@@ -112,8 +82,6 @@ export function LeadList({
                 selected={selectedIds.has(lead.id)}
                 onToggle={() => onToggle(lead.id)}
                 onViewDetails={() => onViewDetails(lead)}
-                onRetry={onRetry}
-                isRetrying={retryingId === lead.id}
               />
             ))
           )}
