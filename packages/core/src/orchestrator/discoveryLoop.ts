@@ -3,6 +3,7 @@ import type OpenAI from 'openai';
 import { v4 as uuid } from 'uuid';
 import type { Lead } from '../types.js';
 import type { LeadStore } from '../store/leads.js';
+import type { CampaignStore } from '../store/campaigns.js';
 import type { RefinementStatusStore } from '../store/refinementStatus.js';
 import type { GooglePlacesClient } from '../integrations/googlePlaces.js';
 import { refineQueryLLM } from '../agents/refinementAgent.js';
@@ -17,6 +18,7 @@ const MAX_WAIT_MS = 120_000;
 
 export interface DiscoveryLoopDeps {
   leadStore: LeadStore;
+  campaignStore: CampaignStore;
   googlePlaces: GooglePlacesClient;
   leadProcessingQueue: Queue;
   refinementStatusStore: RefinementStatusStore;
@@ -44,10 +46,11 @@ async function waitForLeadBatch(
 
 /**
  * Runs one search iteration: search each query, merge results, create leads, enqueue.
- * Dedupes by place_id across all queries. Returns the lead IDs created and enqueued.
+ * Dedupes by place_id within campaign. Returns the lead IDs created and enqueued.
  */
 async function searchAndEnqueue(
   deps: DiscoveryLoopDeps,
+  campaignId: string,
   queries: string[],
   excludePlaceIds: Set<string>
 ): Promise<string[]> {
@@ -67,11 +70,12 @@ async function searchAndEnqueue(
 
   const leadIds: string[] = [];
   for (const place of allPlaces) {
-    const existing = await leadStore.getByPlaceId(place.id);
+    const existing = await leadStore.getByPlaceIdInCampaign(place.id, campaignId);
     if (existing) continue;
 
     const lead: Lead = {
       id: uuid(),
+      campaignId,
       name: place.name,
       address: place.address,
       website: place.website,
@@ -79,8 +83,8 @@ async function searchAndEnqueue(
       status: 'pending',
     };
 
-    await leadStore.create(lead);
-    await leadProcessingQueue.add('process', { leadId: lead.id });
+    await leadStore.create(lead, campaignId);
+    await leadProcessingQueue.add('process', { leadId: lead.id, campaignId });
     leadIds.push(lead.id);
     excludePlaceIds.add(place.id);
   }
@@ -142,21 +146,24 @@ function buildPreviousResultsSummary(
  */
 export async function runLeadDiscoveryLoop(
   deps: DiscoveryLoopDeps,
+  campaignId: string,
   originalQuery: string,
   initialBatchLeadIds: string[]
 ): Promise<void> {
-  const { leadStore, refinementStatusStore, openai } = deps;
+  const { leadStore, campaignStore, refinementStatusStore, openai } = deps;
   let attempt = 1;
   let collectedGoodCount = 0;
   let batchLeadIds = initialBatchLeadIds;
-  let excludePlaceIds = new Set(await leadStore.getAllPlaceIds());
+  let excludePlaceIds = new Set(
+    await leadStore.getAllPlaceIdsForCampaign(campaignId)
+  );
   let activeQuery = originalQuery;
   let lastGoodLeads: Lead[] = [];
   let lastBadLeads: Lead[] = [];
 
   try {
     while (attempt <= MAX_ATTEMPTS && collectedGoodCount < DESIRED_GOOD_LEADS) {
-      await refinementStatusStore.set({
+      await refinementStatusStore.set(campaignId, {
         attempt,
         maxAttempts: MAX_ATTEMPTS,
         query: activeQuery,
@@ -181,9 +188,12 @@ export async function runLeadDiscoveryLoop(
         }).catch(() => fallbackRefineQuery(originalQuery, attempt));
 
         activeQuery = refinedQuery;
-        excludePlaceIds = new Set(await leadStore.getAllPlaceIds());
+        excludePlaceIds = new Set(
+          await leadStore.getAllPlaceIdsForCampaign(campaignId)
+        );
         batchLeadIds = await searchAndEnqueue(
           deps,
+          campaignId,
           [refinedQuery],
           excludePlaceIds
         );
@@ -197,7 +207,7 @@ export async function runLeadDiscoveryLoop(
         }
       }
 
-      await refinementStatusStore.set({
+      await refinementStatusStore.set(campaignId, {
         attempt,
         maxAttempts: MAX_ATTEMPTS,
         query: activeQuery,
@@ -241,6 +251,7 @@ export async function runLeadDiscoveryLoop(
   } catch (err) {
     console.error('[Refinement] Loop error:', err);
   } finally {
-    await refinementStatusStore.clear();
+    await refinementStatusStore.clear(campaignId);
+    await campaignStore.updateStatus(campaignId, 'completed');
   }
 }

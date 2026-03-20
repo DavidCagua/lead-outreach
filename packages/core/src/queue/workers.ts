@@ -26,6 +26,7 @@ const MIN_SCORE_FOR_OUTREACH = 5;
 
 export interface LeadProcessingJobData {
   leadId: string;
+  campaignId: string;
 }
 
 export interface OutreachJobData {
@@ -33,7 +34,7 @@ export interface OutreachJobData {
 }
 
 async function processLeadJob(job: Job<LeadProcessingJobData>): Promise<void> {
-  const { leadId } = job.data;
+  const { leadId, campaignId: _campaignId } = job.data;
   console.log(`[worker] Job ${job.id} picked up`, { leadId });
 
   const openaiKey = getEnv('OPENAI_API_KEY') || OPENAI_API_KEY;

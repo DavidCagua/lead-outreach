@@ -1,10 +1,29 @@
 import { NextResponse } from 'next/server';
-import { leadStore } from '@/lib/core';
+import { leadStore, campaignStore } from '@/lib/core';
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
-    const leads = await leadStore.list();
-    return NextResponse.json(leads);
+    const { searchParams } = new URL(request.url);
+    const campaignId = searchParams.get('campaignId');
+
+    if (!campaignId) {
+      return NextResponse.json({ leads: [], stats: { total: 0, completed: 0, processing: 0, failed: 0 } });
+    }
+
+    const exists = await campaignStore.exists(campaignId);
+    if (!exists) {
+      return NextResponse.json(
+        { error: 'Campaign not found' },
+        { status: 404 }
+      );
+    }
+
+    const [leads, stats] = await Promise.all([
+      leadStore.listByCampaign(campaignId),
+      leadStore.getCampaignStats(campaignId),
+    ]);
+
+    return NextResponse.json({ leads, stats });
   } catch (err) {
     console.error('Get leads error:', err);
     return NextResponse.json(

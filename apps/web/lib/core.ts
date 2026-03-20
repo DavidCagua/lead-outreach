@@ -2,6 +2,7 @@ import OpenAI from 'openai';
 import {
   getRedis,
   createLeadStore,
+  createCampaignStore,
   createRefinementStatusStore,
   getLeadProcessingQueue,
   getOutreachQueue,
@@ -16,6 +17,7 @@ export function createOpenAI(): OpenAI {
   return new OpenAI({ apiKey: key.trim().replace(/^["']|["']$/g, '') });
 }
 export const leadStore = createLeadStore(redis);
+export const campaignStore = createCampaignStore(redis);
 export const refinementStatusStore = createRefinementStatusStore(redis);
 export const leadProcessingQueue = getLeadProcessingQueue();
 export const outreachQueue = getOutreachQueue();

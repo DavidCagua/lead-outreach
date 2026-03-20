@@ -1,6 +1,6 @@
 import type { Redis } from 'ioredis';
 
-const REFINEMENT_KEY = 'refinement:status';
+const REFINEMENT_KEY_PREFIX = 'refinement:status:';
 const TTL_SECONDS = 60 * 5; // 5 minutes
 
 export type RefinementPhase = 'waiting' | 'searching' | 'evaluating';
@@ -12,19 +12,23 @@ export interface RefinementStatus {
   phase: RefinementPhase;
 }
 
+function key(campaignId: string): string {
+  return `${REFINEMENT_KEY_PREFIX}${campaignId}`;
+}
+
 export function createRefinementStatusStore(redis: Redis) {
   return {
-    async get(): Promise<RefinementStatus | null> {
-      const raw = await redis.get(REFINEMENT_KEY);
+    async get(campaignId: string): Promise<RefinementStatus | null> {
+      const raw = await redis.get(key(campaignId));
       return raw ? (JSON.parse(raw) as RefinementStatus) : null;
     },
 
-    async set(status: RefinementStatus): Promise<void> {
-      await redis.set(REFINEMENT_KEY, JSON.stringify(status), 'EX', TTL_SECONDS);
+    async set(campaignId: string, status: RefinementStatus): Promise<void> {
+      await redis.set(key(campaignId), JSON.stringify(status), 'EX', TTL_SECONDS);
     },
 
-    async clear(): Promise<void> {
-      await redis.del(REFINEMENT_KEY);
+    async clear(campaignId: string): Promise<void> {
+      await redis.del(key(campaignId));
     },
   };
 }

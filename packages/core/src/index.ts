@@ -1,5 +1,6 @@
 export * from './types.js';
 export * from './store/leads.js';
+export * from './store/campaigns.js';
 export * from './store/refinementStatus.js';
 export * from './integrations/googlePlaces.js';
 export * from './integrations/firecrawl.js';

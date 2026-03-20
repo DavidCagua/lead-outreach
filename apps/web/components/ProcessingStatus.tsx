@@ -10,20 +10,22 @@ interface RefinementStatus {
 }
 
 interface ProcessingStatusProps {
-  hasLeads: boolean;
+  campaignId: string | null;
 }
 
-export function ProcessingStatus({ hasLeads }: ProcessingStatusProps) {
+export function ProcessingStatus({ campaignId }: ProcessingStatusProps) {
   const [status, setStatus] = useState<RefinementStatus | null>(null);
 
   useEffect(() => {
-    if (!hasLeads) {
+    if (!campaignId) {
       setStatus(null);
       return;
     }
     const fetchStatus = async () => {
       try {
-        const res = await fetch('/api/leads/refinement-status');
+        const res = await fetch(
+          `/api/leads/refinement-status?campaignId=${encodeURIComponent(campaignId)}`
+        );
         if (res.ok) {
           const data = await res.json();
           setStatus(data);
@@ -37,7 +39,7 @@ export function ProcessingStatus({ hasLeads }: ProcessingStatusProps) {
     fetchStatus();
     const interval = setInterval(fetchStatus, 2000);
     return () => clearInterval(interval);
-  }, [hasLeads]);
+  }, [campaignId]);
 
   if (!status) return null;
 

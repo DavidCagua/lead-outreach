@@ -11,8 +11,19 @@ import type { Lead } from '@ekos/core';
 
 const POLL_INTERVAL_MS = 3000;
 
+interface CampaignStats {
+  total: number;
+  completed: number;
+  processing: number;
+  failed: number;
+}
+
 export default function DashboardPage() {
+  const [currentCampaignId, setCurrentCampaignId] = useState<string | null>(null);
+  const [currentCampaignQuery, setCurrentCampaignQuery] = useState<string | null>(null);
+  const [currentCampaignStatus, setCurrentCampaignStatus] = useState<string | null>(null);
   const [leads, setLeads] = useState<Lead[]>([]);
+  const [stats, setStats] = useState<CampaignStats>({ total: 0, completed: 0, processing: 0, failed: 0 });
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [filter, setFilter] = useState(DEFAULT_FILTER);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -23,16 +34,29 @@ export default function DashboardPage() {
   const [insightOpen, setInsightOpen] = useState(false);
 
   const fetchLeads = useCallback(async () => {
+    if (!currentCampaignId) {
+      setLeads([]);
+      setStats({ total: 0, completed: 0, processing: 0, failed: 0 });
+      return;
+    }
     try {
-      const res = await fetch('/api/leads');
+      const res = await fetch(
+        `/api/leads?campaignId=${encodeURIComponent(currentCampaignId)}`
+      );
+      if (res.status === 404) {
+        setLeads([]);
+        setStats({ total: 0, completed: 0, processing: 0, failed: 0 });
+        return;
+      }
       if (res.ok) {
         const data = await res.json();
-        setLeads(data);
+        setLeads(data.leads ?? []);
+        setStats(data.stats ?? { total: 0, completed: 0, processing: 0, failed: 0 });
       }
     } catch {
       // Ignore
     }
-  }, []);
+  }, [currentCampaignId]);
 
   useEffect(() => {
     fetchLeads();
@@ -46,7 +70,13 @@ export default function DashboardPage() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ query }),
     });
-    if (res.ok) await fetchLeads();
+    if (res.ok) {
+      const data = await res.json();
+      setCurrentCampaignId(data.campaignId ?? null);
+      setCurrentCampaignQuery(data.query ?? query);
+      setCurrentCampaignStatus('running');
+      await fetchLeads();
+    }
   };
 
   const handleToggleLead = (id: string) => {
@@ -76,7 +106,10 @@ export default function DashboardPage() {
       const res = await fetch('/api/outreach/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ leadIds: Array.from(selectedIds) }),
+        body: JSON.stringify({
+          leadIds: Array.from(selectedIds),
+          campaignId: currentCampaignId,
+        }),
       });
       if (res.ok) {
         setSelectedIds(new Set());
@@ -93,7 +126,7 @@ export default function DashboardPage() {
       const res = await fetch('/api/leads/retry', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ leadId }),
+        body: JSON.stringify({ leadId, campaignId: currentCampaignId }),
       });
       if (res.ok) await fetchLeads();
     } finally {
@@ -109,7 +142,10 @@ export default function DashboardPage() {
       const res = await fetch('/api/leads/retry', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ leadIds: failedIds }),
+        body: JSON.stringify({
+          leadIds: failedIds,
+          campaignId: currentCampaignId,
+        }),
       });
       if (res.ok) await fetchLeads();
     } finally {
@@ -152,6 +188,12 @@ export default function DashboardPage() {
     (l) => l.status === 'completed' && l.outreach
   );
 
+  useEffect(() => {
+    if (stats.total > 0 && stats.completed + stats.failed >= stats.total) {
+      setCurrentCampaignStatus('completed');
+    }
+  }, [stats]);
+
   return (
     <div style={{ maxWidth: 1100, margin: '0 auto', padding: 24, paddingBottom: 100 }}>
       <h1 style={{ fontSize: 24, marginBottom: 8 }}>Ekos — Sales Outreach</h1>
@@ -161,27 +203,77 @@ export default function DashboardPage() {
 
       <SearchBar onSearch={handleSearch} />
 
-      {leads.length > 0 && (
+      {currentCampaignId && currentCampaignQuery && (
+        <div
+          style={{
+            marginTop: 16,
+            padding: '10px 14px',
+            borderRadius: 'var(--radius)',
+            border: '1px solid var(--border)',
+            background: 'var(--bg-card)',
+            fontSize: 14,
+            color: 'var(--text-muted)',
+          }}
+        >
+          <strong>Campaign:</strong> {currentCampaignQuery}
+          {stats.total > 0 && (
+            <span style={{ marginLeft: 12 }}>
+              Status: {currentCampaignStatus ?? 'running'} ({stats.completed}/{stats.total} processed)
+            </span>
+          )}
+        </div>
+      )}
+
+      {currentCampaignId && (
         <div style={{ marginTop: 16 }}>
-          <ProcessingStatus hasLeads={leads.length > 0} />
+          <ProcessingStatus campaignId={currentCampaignId} />
         </div>
       )}
 
       <h2 style={{ fontSize: 18, marginTop: 24, marginBottom: 12 }}>Step 1 — Lead Review</h2>
-      <LeadList
-        leads={leads}
-        filter={filter}
-        onFilterChange={setFilter}
-        selectedIds={selectedIds}
-        onToggle={handleToggleLead}
-        onViewDetails={handleViewDetails}
-        onSelectAllScoreAbove7={handleSelectAllScoreAbove7}
-        onRetry={handleRetry}
-        onRetryAllFailed={handleRetryAllFailed}
-        retryingId={retryingId}
-        isRetryingAll={isRetryingAll}
-        isLoading={false}
-      />
+
+      {!currentCampaignId ? (
+        <div
+          style={{
+            padding: 24,
+            textAlign: 'center',
+            color: 'var(--text-muted)',
+            fontSize: 14,
+            border: '1px dashed var(--border)',
+            borderRadius: 'var(--radius)',
+          }}
+        >
+          Search to discover leads and start a campaign.
+        </div>
+      ) : stats.total === 0 && leads.length === 0 ? (
+        <div
+          style={{
+            padding: 24,
+            textAlign: 'center',
+            color: 'var(--text-muted)',
+            fontSize: 14,
+            border: '1px dashed var(--border)',
+            borderRadius: 'var(--radius)',
+          }}
+        >
+          No high-quality leads found. Try a different search query.
+        </div>
+      ) : (
+        <LeadList
+          leads={leads}
+          filter={filter}
+          onFilterChange={setFilter}
+          selectedIds={selectedIds}
+          onToggle={handleToggleLead}
+          onViewDetails={handleViewDetails}
+          onSelectAllScoreAbove7={handleSelectAllScoreAbove7}
+          onRetry={handleRetry}
+          onRetryAllFailed={handleRetryAllFailed}
+          retryingId={retryingId}
+          isRetryingAll={isRetryingAll}
+          isLoading={false}
+        />
+      )}
 
       <SelectionBar
         selectedCount={selectedIds.size}

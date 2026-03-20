@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { v4 as uuid } from 'uuid';
 import {
   leadStore,
+  campaignStore,
   leadProcessingQueue,
   googlePlaces,
   refinementStatusStore,
@@ -25,6 +26,16 @@ export async function POST(request: Request) {
     }
 
     const trimmedQuery = query.trim();
+    const campaignId = crypto.randomUUID();
+
+    const campaign = {
+      id: campaignId,
+      query: trimmedQuery,
+      status: 'running' as const,
+      createdAt: Date.now(),
+    };
+    await campaignStore.create(campaign);
+
     const openai = createOpenAI();
     const queries = await expandQuery(openai, trimmedQuery);
     const seenPlaceIds = new Set<string>();
@@ -47,7 +58,7 @@ export async function POST(request: Request) {
     let skipped = 0;
 
     for (const place of allPlaces) {
-      const existing = await leadStore.getByPlaceId(place.id);
+      const existing = await leadStore.getByPlaceIdInCampaign(place.id, campaignId);
       if (existing) {
         skipped++;
         console.log(`[search] Skipped ${place.name} (existing lead)`);
@@ -56,6 +67,7 @@ export async function POST(request: Request) {
 
       const lead: Lead = {
         id: uuid(),
+        campaignId,
         name: place.name,
         address: place.address,
         website: place.website,
@@ -63,8 +75,11 @@ export async function POST(request: Request) {
         status: 'pending',
       };
 
-      await leadStore.create(lead);
-      const job = await leadProcessingQueue.add('process', { leadId: lead.id });
+      await leadStore.create(lead, campaignId);
+      const job = await leadProcessingQueue.add('process', {
+        leadId: lead.id,
+        campaignId,
+      });
       jobIds.push(job.id ?? lead.id);
       createdLeadIds.push(lead.id);
       console.log(`[search] Enqueued ${place.name}`, { leadId: lead.id, jobId: job.id });
@@ -75,16 +90,20 @@ export async function POST(request: Request) {
     void runLeadDiscoveryLoop(
       {
         leadStore,
+        campaignStore,
         googlePlaces,
         leadProcessingQueue,
         refinementStatusStore,
         openai,
       },
+      campaignId,
       trimmedQuery,
       createdLeadIds
     );
 
     return NextResponse.json({
+      campaignId,
+      query: trimmedQuery,
       jobIds,
       message: `Enqueued ${jobIds.length} leads for processing`,
     });

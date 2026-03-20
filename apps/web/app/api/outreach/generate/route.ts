@@ -5,6 +5,7 @@ export async function POST(request: Request) {
   try {
     const body = await request.json();
     const leadIds = body?.leadIds;
+    const campaignId = typeof body?.campaignId === 'string' ? body.campaignId : undefined;
 
     if (!Array.isArray(leadIds) || leadIds.length === 0) {
       return NextResponse.json(
@@ -22,6 +23,7 @@ export async function POST(request: Request) {
       if (!lead || lead.status !== 'completed' || !lead.score || lead.score.score < 5) {
         continue;
       }
+      if (campaignId && lead.campaignId !== campaignId) continue;
 
       const job = await outreachQueue.add('generate', { leadId });
       jobIds.push(job.id ?? leadId);

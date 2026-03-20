@@ -2,23 +2,46 @@ import type { Redis } from 'ioredis';
 import type { Lead } from '../types.js';
 
 const LEAD_PREFIX = 'lead:';
-const LEAD_IDS_KEY = 'lead:ids';
-const PLACE_ID_INDEX = 'place_id:';
+const PLACE_ID_PREFIX = 'place_id:';
+const CAMPAIGN_LEADS_SUFFIX = ':leads';
+const CAMPAIGN_PLACE_IDS_SUFFIX = ':place_ids';
 const TTL_SECONDS = 60 * 60 * 24 * 7; // 7 days
+
+export interface CampaignStats {
+  total: number;
+  completed: number;
+  processing: number;
+  failed: number;
+}
 
 export function createLeadStore(redis: Redis) {
   return {
-    async getByPlaceId(placeId: string): Promise<Lead | null> {
-      const leadId = await redis.get(`${PLACE_ID_INDEX}${placeId}`);
+    async getByPlaceIdInCampaign(
+      placeId: string,
+      campaignId: string
+    ): Promise<Lead | null> {
+      const leadId = await redis.get(
+        `${PLACE_ID_PREFIX}${campaignId}:${placeId}`
+      );
       return leadId ? this.get(leadId) : null;
     },
 
-    async create(lead: Lead): Promise<void> {
+    async create(lead: Lead, campaignId: string): Promise<void> {
       const key = `${LEAD_PREFIX}${lead.id}`;
-      await redis.set(key, JSON.stringify(lead), 'EX', TTL_SECONDS);
-      await redis.sadd(LEAD_IDS_KEY, lead.id);
+      const leadWithCampaign: Lead = { ...lead, campaignId };
+      await redis.set(key, JSON.stringify(leadWithCampaign), 'EX', TTL_SECONDS);
+      await redis.sadd(`campaign:${campaignId}${CAMPAIGN_LEADS_SUFFIX}`, lead.id);
       if (lead.place_id) {
-        await redis.set(`${PLACE_ID_INDEX}${lead.place_id}`, lead.id, 'EX', TTL_SECONDS);
+        await redis.set(
+          `${PLACE_ID_PREFIX}${campaignId}:${lead.place_id}`,
+          lead.id,
+          'EX',
+          TTL_SECONDS
+        );
+        await redis.sadd(
+          `campaign:${campaignId}${CAMPAIGN_PLACE_IDS_SUFFIX}`,
+          lead.place_id
+        );
       }
     },
 
@@ -38,8 +61,10 @@ export function createLeadStore(redis: Redis) {
       return updated;
     },
 
-    async list(): Promise<Lead[]> {
-      const ids = await redis.smembers(LEAD_IDS_KEY);
+    async listByCampaign(campaignId: string): Promise<Lead[]> {
+      const ids = await redis.smembers(
+        `campaign:${campaignId}${CAMPAIGN_LEADS_SUFFIX}`
+      );
       const leads: Lead[] = [];
 
       for (const id of ids) {
@@ -47,16 +72,34 @@ export function createLeadStore(redis: Redis) {
         if (lead) leads.push(lead);
       }
 
-      return leads.sort((a, b) => b.name.localeCompare(a.name));
+      return leads.sort((a, b) => {
+        const scoreA = a.score?.score ?? 0;
+        const scoreB = b.score?.score ?? 0;
+        return scoreB - scoreA;
+      });
     },
 
-    async getAllPlaceIds(): Promise<string[]> {
-      const ids = await redis.smembers(LEAD_IDS_KEY);
-      const placeIds: string[] = [];
-      for (const id of ids) {
-        const lead = await this.get(id);
-        if (lead?.place_id) placeIds.push(lead.place_id);
+    async getCampaignStats(campaignId: string): Promise<CampaignStats> {
+      const leads = await this.listByCampaign(campaignId);
+      const stats: CampaignStats = {
+        total: leads.length,
+        completed: 0,
+        processing: 0,
+        failed: 0,
+      };
+      for (const l of leads) {
+        if (l.status === 'completed') stats.completed++;
+        else if (l.status === 'processing' || l.status === 'pending')
+          stats.processing++;
+        else if (l.status === 'failed') stats.failed++;
       }
+      return stats;
+    },
+
+    async getAllPlaceIdsForCampaign(campaignId: string): Promise<string[]> {
+      const placeIds = await redis.smembers(
+        `campaign:${campaignId}${CAMPAIGN_PLACE_IDS_SUFFIX}`
+      );
       return placeIds;
     },
   };

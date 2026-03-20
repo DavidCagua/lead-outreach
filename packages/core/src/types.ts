@@ -1,5 +1,14 @@
 export type LeadStatus = 'pending' | 'processing' | 'completed' | 'failed';
 
+export type CampaignStatus = 'running' | 'completed';
+
+export interface Campaign {
+  id: string;
+  query: string;
+  status: CampaignStatus;
+  createdAt: number;
+}
+
 export type ClinicSize = 'small' | 'medium' | 'large';
 
 export type Priority = 'low' | 'medium' | 'high';
@@ -33,6 +42,7 @@ export type ProcessingPhase =
 
 export interface Lead {
   id: string;
+  campaignId: string;
   name: string;
   address: string;
   website?: string;

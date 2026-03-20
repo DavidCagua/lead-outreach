@@ -9,6 +9,7 @@ export async function POST(request: Request) {
       : typeof body?.leadId === 'string'
         ? [body.leadId]
         : [];
+    const campaignId = typeof body?.campaignId === 'string' ? body.campaignId : undefined;
 
     if (leadIds.length === 0) {
       return NextResponse.json(
@@ -22,6 +23,7 @@ export async function POST(request: Request) {
     for (const leadId of leadIds) {
       const lead = await leadStore.get(leadId);
       if (!lead) continue;
+      if (campaignId && lead.campaignId !== campaignId) continue;
 
       // Only retry failed or pending (stuck) leads
       if (lead.status !== 'failed' && lead.status !== 'pending') continue;
@@ -35,7 +37,10 @@ export async function POST(request: Request) {
         outreach: undefined,
       });
 
-      const job = await leadProcessingQueue.add('process', { leadId });
+      const job = await leadProcessingQueue.add('process', {
+        leadId,
+        campaignId: lead.campaignId,
+      });
       jobIds.push(job.id ?? leadId);
     }
 
