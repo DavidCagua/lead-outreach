@@ -11,7 +11,7 @@ import {
 import { expandQuery, runLeadDiscoveryLoop } from '@ekos/core';
 import type { Lead } from '@ekos/core';
 
-const PLACES_PER_QUERY = 5;
+const PLACES_PER_QUERY = 4;
 
 export async function POST(request: Request) {
   try {

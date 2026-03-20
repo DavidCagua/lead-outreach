@@ -12,7 +12,7 @@ import { fallbackRefineQuery, isGoodLead, isBadLead } from './refinement.js';
 
 const MAX_ATTEMPTS = 3;
 const DESIRED_GOOD_LEADS = 3;
-const PLACES_PER_QUERY = 5;
+const PLACES_PER_QUERY = 4;
 const POLL_INTERVAL_MS = 3000;
 const MAX_WAIT_MS = 120_000;
 

@@ -211,7 +211,7 @@ export function createLeadProcessingWorker(): Worker<LeadProcessingJobData> {
     processLeadJob,
     {
       connection: createRedisConnection({ forWorker: true }) as any,
-      concurrency: 1, // Firecrawl free tier ~3 req/min; sequential processing avoids 429s
+      concurrency: 2,
       removeOnComplete: { count: 1000 },
       removeOnFail: { count: 5000 },
     }

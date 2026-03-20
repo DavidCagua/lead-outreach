@@ -1,7 +1,7 @@
 import OpenAI from 'openai';
 import { fallbackRefineQuery } from '../orchestrator/refinement.js';
 
-const MAX_EXPAND_QUERIES = 3;
+const MAX_EXPAND_QUERIES = 2;
 
 export interface PreviousResultsSummary {
   avgScore: number;
