@@ -57,7 +57,7 @@ async function processLeadJob(job: Job<LeadProcessingJobData>): Promise<void> {
     console.log(`[${lead.name}] ${step}${detail ? `: ${detail}` : ''}`);
 
   log('1. Job started', `leadId=${leadId}`);
-  await leadStore.update(leadId, { status: 'processing' });
+  await leadStore.update(leadId, { status: 'processing', processingPhase: 'fetching_website' });
 
   try {
     let website = lead.website;
@@ -79,6 +79,7 @@ async function processLeadJob(job: Job<LeadProcessingJobData>): Promise<void> {
       log('FAILED', reason);
       await leadStore.update(leadId, {
         status: 'failed',
+        processingPhase: undefined,
         extracted: undefined,
         score: undefined,
         outreach: null,
@@ -92,6 +93,7 @@ async function processLeadJob(job: Job<LeadProcessingJobData>): Promise<void> {
     let content: string;
     try {
       log('3. Firecrawl crawl started', website);
+      await leadStore.update(leadId, { processingPhase: 'crawling' });
       content = await firecrawl.crawl(website);
       log('3. Firecrawl done', `${content?.length ?? 0} chars`);
     } catch (scrapeErr) {
@@ -99,6 +101,7 @@ async function processLeadJob(job: Job<LeadProcessingJobData>): Promise<void> {
       log('FAILED', reason);
       await leadStore.update(leadId, {
         status: 'failed',
+        processingPhase: undefined,
         extracted: undefined,
         score: undefined,
         outreach: null,
@@ -112,6 +115,7 @@ async function processLeadJob(job: Job<LeadProcessingJobData>): Promise<void> {
       log('FAILED', reason);
       await leadStore.update(leadId, {
         status: 'failed',
+        processingPhase: undefined,
         extracted: undefined,
         score: undefined,
         outreach: null,
@@ -121,6 +125,7 @@ async function processLeadJob(job: Job<LeadProcessingJobData>): Promise<void> {
     }
 
     log('4. Extraction agent started');
+    await leadStore.update(leadId, { processingPhase: 'extracting' });
     let extracted = await runExtractionAgent(openai, content);
     let attempts = 1;
 
@@ -132,6 +137,7 @@ async function processLeadJob(job: Job<LeadProcessingJobData>): Promise<void> {
     log('4. Extraction done', `confidence=${extracted.confidence}, services=${extracted.services.length}`);
 
     log('5. Scoring agent started');
+    await leadStore.update(leadId, { processingPhase: 'scoring' });
     const score = await runScoringAgent(openai, extracted, lead.name);
     log('5. Scoring done', `score=${score.score} (${score.priority})`);
 
@@ -140,6 +146,7 @@ async function processLeadJob(job: Job<LeadProcessingJobData>): Promise<void> {
       score,
       outreach: score.score >= MIN_SCORE_FOR_OUTREACH ? undefined : null,
       status: 'completed',
+      processingPhase: undefined,
     });
     log('6. Completed', `score=${score.score}`);
   } catch (err) {
@@ -147,6 +154,7 @@ async function processLeadJob(job: Job<LeadProcessingJobData>): Promise<void> {
     log('FAILED', reason);
     await leadStore.update(leadId, {
       status: 'failed',
+      processingPhase: undefined,
       extracted: undefined,
       score: undefined,
       outreach: null,
@@ -220,6 +228,7 @@ export function createLeadProcessingWorker(): Worker<LeadProcessingJobData> {
       const reason = ((err instanceof Error ? err.message : String(err)) || 'Job failed').trim() || 'Job failed';
       await store.update(leadId, {
         status: 'failed',
+        processingPhase: undefined,
         extracted: undefined,
         score: undefined,
         outreach: null,

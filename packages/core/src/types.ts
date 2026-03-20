@@ -24,6 +24,13 @@ export interface Outreach {
   body: string;
 }
 
+/** Granular phase when status is "processing" - shown in UI for feedback */
+export type ProcessingPhase =
+  | 'fetching_website'
+  | 'crawling'
+  | 'extracting'
+  | 'scoring';
+
 export interface Lead {
   id: string;
   name: string;
@@ -31,6 +38,7 @@ export interface Lead {
   website?: string;
   place_id?: string;
   status: LeadStatus;
+  processingPhase?: ProcessingPhase;
   extracted?: Extracted;
   score?: Score;
   outreach?: Outreach | null;

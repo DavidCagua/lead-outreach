@@ -19,6 +19,13 @@ const STATUS_ICONS: Record<string, string> = {
   failed: '❌',
 };
 
+const PROCESSING_PHASE_LABELS: Record<string, string> = {
+  fetching_website: 'Fetching website',
+  crawling: 'Crawling site',
+  extracting: 'Extracting info',
+  scoring: 'Scoring lead',
+};
+
 export function LeadCard({
   lead,
   selected,
@@ -81,7 +88,10 @@ export function LeadCard({
             </span>
           )}
           <span style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
-            {STATUS_ICONS[status] ?? ''} {status}
+            {STATUS_ICONS[status] ?? ''}{' '}
+            {status === 'processing' && lead.processingPhase
+              ? PROCESSING_PHASE_LABELS[lead.processingPhase] ?? status
+              : status}
           </span>
         </div>
         {lead.address && (
