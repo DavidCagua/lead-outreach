@@ -9,5 +9,6 @@ export * from './queue/workers.js';
 export * from './agents/extractionAgent.js';
 export * from './agents/scoringAgent.js';
 export * from './agents/outreachAgent.js';
+export * from './agents/refinementAgent.js';
 export * from './orchestrator/refinement.js';
 export * from './orchestrator/discoveryLoop.js';

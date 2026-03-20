@@ -1,8 +1,16 @@
 import { NextResponse } from 'next/server';
 import { v4 as uuid } from 'uuid';
-import { leadStore, leadProcessingQueue, googlePlaces, refinementStatusStore } from '@/lib/core';
-import { refineQuery, runLeadDiscoveryLoop } from '@ekos/core';
+import {
+  leadStore,
+  leadProcessingQueue,
+  googlePlaces,
+  refinementStatusStore,
+  createOpenAI,
+} from '@/lib/core';
+import { expandQuery, runLeadDiscoveryLoop } from '@ekos/core';
 import type { Lead } from '@ekos/core';
+
+const PLACES_PER_QUERY = 2;
 
 export async function POST(request: Request) {
   try {
@@ -17,27 +25,29 @@ export async function POST(request: Request) {
     }
 
     const trimmedQuery = query.trim();
-    const refinedQueryAttempt1 = refineQuery(trimmedQuery, 1);
-    const places = await googlePlaces.textSearch(refinedQueryAttempt1, 2);
-    console.log(`[search] Google returned ${places.length} places`);
-    const redisUrl = process.env.REDIS_URL ?? '(not set)';
-    console.log(`[search] REDIS_URL: ${redisUrl.replace(/:[^:@]+@/, ':****@')}`);
-
+    const openai = createOpenAI();
+    const queries = await expandQuery(openai, trimmedQuery);
     const seenPlaceIds = new Set<string>();
+    const allPlaces: Array<{ id: string; name: string; address: string; website?: string }> = [];
+
+    for (const q of queries) {
+      const places = await googlePlaces.textSearch(q, PLACES_PER_QUERY);
+      for (const p of places) {
+        if (!seenPlaceIds.has(p.id)) {
+          seenPlaceIds.add(p.id);
+          allPlaces.push(p);
+        }
+      }
+    }
+
+    console.log(`[search] expandQuery → ${queries.length} queries, ${allPlaces.length} places after dedupe`);
+
     const jobIds: string[] = [];
     const createdLeadIds: string[] = [];
     let skipped = 0;
 
-    for (const place of places) {
-      const placeId = place.id;
-      if (seenPlaceIds.has(placeId)) {
-        skipped++;
-        continue;
-      }
-      seenPlaceIds.add(placeId);
-
-      // Skip if we already have this clinic (from a previous search)
-      const existing = await leadStore.getByPlaceId(placeId);
+    for (const place of allPlaces) {
+      const existing = await leadStore.getByPlaceId(place.id);
       if (existing) {
         skipped++;
         console.log(`[search] Skipped ${place.name} (existing lead)`);
@@ -49,7 +59,7 @@ export async function POST(request: Request) {
         name: place.name,
         address: place.address,
         website: place.website,
-        place_id: placeId,
+        place_id: place.id,
         status: 'pending',
       };
 
@@ -60,16 +70,15 @@ export async function POST(request: Request) {
       console.log(`[search] Enqueued ${place.name}`, { leadId: lead.id, jobId: job.id });
     }
 
-    console.log(`[search] Created ${jobIds.length} leads, enqueued ${jobIds.length} jobs, skipped ${skipped}`);
-    console.log(`[search] Job IDs: ${jobIds.join(', ')}`);
+    console.log(`[search] Created ${createdLeadIds.length} leads, skipped ${skipped}`);
 
-    // Run refinement loop in background (don't block response)
     void runLeadDiscoveryLoop(
       {
         leadStore,
         googlePlaces,
         leadProcessingQueue,
         refinementStatusStore,
+        openai,
       },
       trimmedQuery,
       createdLeadIds

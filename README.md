@@ -56,12 +56,56 @@ An MVP system that discovers clinics via Google Places, enriches them with Firec
 3. **Generate emails** - Click "Generate emails for selected" to create personalized outreach.
 4. **Edit & approve** - Review each email, edit if needed, regenerate, or approve.
 
+## Architecture
+
+### High-Level Flow
+
+```
+User Search → expandQuery (3 queries) → Google Places → Create leads → Enqueue
+                    ↓
+         Discovery Loop (attempt 1: wait | attempts 2-3: refineQueryLLM → search)
+                    ↓
+         Lead worker (crawl, extract, score) → Redis store
+                    ↓
+         Outreach worker (generate emails) → Redis store
+                    ↓
+         Dashboard polls, human reviews
+```
+
+### Refinement Layer
+
+The system uses an **adaptive, LLM-driven** refinement strategy instead of fixed rules:
+
+| Phase | Strategy | Purpose |
+|-------|----------|---------|
+| **Attempt 1** | `expandQuery` | LLM generates 2–3 query variations from the user input. Increases recall by exploring multiple search angles. |
+| **Attempts 2–3** | `refineQueryLLM` | LLM refines based on feedback: good leads (score, services, pain points) vs bad leads (failure reasons). Returns a single improved query. |
+
+- **Fallback:** If the LLM fails, a deterministic `fallbackRefineQuery` is used (quality signals + niche terms).
+- **Stopping:** Loop stops when there are ≥5 good leads or 3 attempts are reached.
+- **Good lead criteria:** `confidence ≥ 0.6`, `score ≥ 9`, has services.
+
+### Components
+
+| Component | Role |
+|-----------|------|
+| **Search API** | Calls `expandQuery`, searches each query via Google Places, dedupes by `place_id`, creates leads, enqueues to `lead-processing`, starts discovery loop. |
+| **Discovery loop** | Runs in background. Attempt 1 waits for initial batch. Attempts 2–3 call `refineQueryLLM` with `previousResultsSummary`, search, enqueue. Writes refinement status to Redis for UI. |
+| **Lead worker** | Concurrency 1. Crawls website (Firecrawl), runs extraction agent, scoring agent, optionally outreach agent. Updates lead in Redis. |
+| **Outreach worker** | Concurrency 5. Generates personalized emails for completed leads. |
+| **ProcessingStatus** | Polls `GET /api/leads/refinement-status` every 2s, shows "Refining results (Attempt X / 3)". |
+
+### Data Flow
+
+- **Redis:** Lead store (`lead:*`), refinement status (`refinement:status`), BullMQ queues.
+- **Polling:** Dashboard polls `GET /api/leads` every 3s for progressive updates.
+
 ## Project Structure
 
 ```
 ekos/
 ├── apps/web/          # Next.js frontend + API routes
-├── packages/core/     # Agents, integrations, queue, store
+├── packages/core/     # Agents, integrations, queue, store, orchestrator
 ├── packages/worker/   # BullMQ worker process
 └── pnpm-workspace.yaml
 ```

@@ -17,12 +17,15 @@ const NICHE_REFINEMENTS = [
 ];
 
 /**
- * Refines the search query for iterative lead discovery.
+ * Deterministic fallback for query refinement when LLM fails.
  * Attempt 1: original query
  * Attempt 2: add quality signals
  * Attempt 3: narrow to niche
  */
-export function refineQuery(originalQuery: string, attempt: number): string {
+export function fallbackRefineQuery(
+  originalQuery: string,
+  attempt: number
+): string {
   const trimmed = originalQuery.trim();
   if (attempt === 1) return trimmed;
   if (attempt === 2) {

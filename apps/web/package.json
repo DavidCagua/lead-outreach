@@ -10,6 +10,7 @@
   "dependencies": {
     "@ekos/core": "workspace:*",
     "dotenv": "^16.4.5",
+    "openai": "^4.77.0",
     "next": "^15.0.3",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
