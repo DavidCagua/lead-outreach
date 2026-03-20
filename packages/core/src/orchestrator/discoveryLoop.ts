@@ -10,8 +10,8 @@ import type { PreviousResultsSummary } from '../agents/refinementAgent.js';
 import { fallbackRefineQuery, isGoodLead, isBadLead } from './refinement.js';
 
 const MAX_ATTEMPTS = 3;
-const DESIRED_GOOD_LEADS = 5;
-const PLACES_PER_QUERY = 2; // dev: set to 10 for production
+const DESIRED_GOOD_LEADS = 3;
+const PLACES_PER_QUERY = 5;
 const POLL_INTERVAL_MS = 3000;
 const MAX_WAIT_MS = 120_000;
 
