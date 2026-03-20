@@ -2,7 +2,7 @@
   "name": "ekos",
   "private": true,
   "scripts": {
-    "dev": "pnpm --filter web dev",
+    "dev": "pnpm --filter @ekos/core build && pnpm --filter web dev",
     "build": "pnpm -r build",
     "worker": "pnpm --filter @ekos/worker dev",
     "dev:all": "pnpm run dev & pnpm run worker"

@@ -65,6 +65,22 @@ export function InsightPanel({ lead, isOpen, onClose }: InsightPanelProps) {
               {lead.address && (
                 <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>{lead.address}</div>
               )}
+              {lead.website && (
+                <a
+                  href={lead.website.startsWith('http') ? lead.website : `https://${lead.website}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{
+                    fontSize: 14,
+                    color: 'var(--accent)',
+                    marginTop: 6,
+                    display: 'inline-block',
+                    wordBreak: 'break-all',
+                  }}
+                >
+                  {lead.website}
+                </a>
+              )}
             </div>
 
             {lead.extracted && (
