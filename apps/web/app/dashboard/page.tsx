@@ -31,6 +31,7 @@ export default function DashboardPage() {
   const [currentCampaignStatus, setCurrentCampaignStatus] = useState<string | null>(null);
   const [leads, setLeads] = useState<Lead[]>([]);
   const [stats, setStats] = useState<CampaignStats>({ total: 0, completed: 0, processing: 0, failed: 0 });
+  const [campaignStatusFromApi, setCampaignStatusFromApi] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [filter, setFilter] = useState(DEFAULT_FILTER);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -45,6 +46,7 @@ export default function DashboardPage() {
     if (!campaignId) {
       setLeads([]);
       setStats({ total: 0, completed: 0, processing: 0, failed: 0 });
+      setCampaignStatusFromApi(null);
       return;
     }
     try {
@@ -55,6 +57,7 @@ export default function DashboardPage() {
       if (res.status === 404) {
         setLeads([]);
         setStats({ total: 0, completed: 0, processing: 0, failed: 0 });
+        setCampaignStatusFromApi(null);
         return;
       }
       if (res.ok) {
@@ -62,6 +65,7 @@ export default function DashboardPage() {
         if (currentCampaignIdRef.current !== campaignId) return;
         setLeads(data.leads ?? []);
         setStats(data.stats ?? { total: 0, completed: 0, processing: 0, failed: 0 });
+        setCampaignStatusFromApi(data.campaignStatus ?? null);
       }
     } catch {
       if (currentCampaignIdRef.current !== campaignId) return;
@@ -119,6 +123,7 @@ export default function DashboardPage() {
       setCurrentCampaignQuery(null);
       setLeads([]);
       setStats({ total: 0, completed: 0, processing: 0, failed: 0 });
+      setCampaignStatusFromApi(null);
       return;
     }
     const campaign = campaigns.find((c) => c.id === campaignId);
@@ -128,6 +133,7 @@ export default function DashboardPage() {
       setCurrentCampaignStatus(campaign.status);
       setLeads([]);
       setStats({ total: 0, completed: 0, processing: 0, failed: 0 });
+      setCampaignStatusFromApi(campaign.status);
     }
   };
 
@@ -302,7 +308,16 @@ export default function DashboardPage() {
             borderRadius: 'var(--radius)',
           }}
         >
-          No high-quality leads found. Try a different search query.
+          {campaignStatusFromApi !== 'completed' ? (
+            <>
+              <div style={{ marginBottom: 8 }}>Discovering leads…</div>
+              <div style={{ fontSize: 12, opacity: 0.8 }}>
+                Searching and processing clinics. This may take a minute.
+              </div>
+            </>
+          ) : (
+            'No high-quality leads found. Try a different search query.'
+          )}
         </div>
       ) : (
         <LeadList

@@ -7,7 +7,11 @@ export async function GET(request: Request) {
     const campaignId = searchParams.get('campaignId');
 
     if (!campaignId) {
-      return NextResponse.json({ leads: [], stats: { total: 0, completed: 0, processing: 0, failed: 0 } });
+      return NextResponse.json({
+        leads: [],
+        stats: { total: 0, completed: 0, processing: 0, failed: 0 },
+        campaignStatus: null,
+      });
     }
 
     const exists = await campaignStore.exists(campaignId);
@@ -18,12 +22,17 @@ export async function GET(request: Request) {
       );
     }
 
-    const [leads, stats] = await Promise.all([
+    const [campaign, leads, stats] = await Promise.all([
+      campaignStore.get(campaignId),
       leadStore.listByCampaign(campaignId),
       leadStore.getCampaignStats(campaignId),
     ]);
 
-    return NextResponse.json({ leads, stats });
+    return NextResponse.json({
+      leads,
+      stats,
+      campaignStatus: campaign?.status ?? 'running',
+    });
   } catch (err) {
     console.error('Get leads error:', err);
     return NextResponse.json(
